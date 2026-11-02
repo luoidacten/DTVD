@@ -1,0 +1,13 @@
+{
+  "name": "legacy-dau-truong",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Legacy Đấu Trường: đối kháng 1v1 điều khiển trực tiếp, offline đấu máy và online 2 người qua WebRTC (PeerJS).",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node tools/sim.mjs 2",
+    "balance": "node tools/metrics.mjs 3 normal",
+    "serve": "cd .. && python3 -m http.server 8765"
+  }
+}
