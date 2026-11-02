@@ -4,6 +4,7 @@ Game đối kháng **1v1 điều khiển trực tiếp**, lấy gameplay từ b�
 
 Bản viết lại từ đầu của Legacy (bản cũ nằm ở repo `auto-bat`, thư mục `legacy/`). 40 tướng. Không cần build, không cần máy chủ riêng: GitHub Pages phục vụ thẳng `index.html`.
 
+- Chơi online (GitHub Pages): https://luoidacten.github.io/DTVD/
 - Chạy máy mình: `npm run serve` (hoặc `python3 -m http.server 8765`) rồi mở `http://localhost:8765/`
 
 ## Luật
