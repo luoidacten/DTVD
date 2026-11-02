@@ -8,6 +8,8 @@ import { Renderer } from './render.js';
 import { Input, toFrame } from './input.js';
 import { sfx, unlockAudio, toggleMute, isMuted } from './audio.js';
 import { Room, PROTO, validCode } from './net.js';
+import { Tournament, RULES, PERSONAS } from '../engine/tournament.js';
+import { ITEMS, AUGS, ITEM_IDS, MAX_ITEMS, sumMods, modText, STAT_LABEL } from '../engine/loot.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -51,7 +53,7 @@ function beginGame(g) {
   input.enabled = true;
   input.last = {};
   hud.innerHTML = `<div class="hud-btns"><button class="hb" id="hb-pause" title="Tạm dừng / Menu">⏸</button><button class="hb" id="hb-mute" title="Âm thanh">${isMuted() ? '🔇' : '🔊'}</button><button class="hb mob-only" id="hb-full" title="Toàn màn hình">⛶</button></div>`;
-  input.mount(hud, G.cfg.heroes[G.me]);
+  if (G.me >= 0) input.mount(hud, G.cfg.heroes[G.me]);
   $('#hb-pause').onclick = () => openPause();
   $('#hb-mute').onclick = (e) => { e.currentTarget.textContent = toggleMute() ? '🔇' : '🔊'; };
   $('#hb-full').onclick = () => goFullscreen();
@@ -90,7 +92,7 @@ function myFighter(view) { return view ? view.f[G.me] : null; }
 
 function simulate(dt) {
   const w = G.world;
-  if (G.paused) return;
+  if (G.paused || G.mode === 'arena-done') return;
   G.acc += dt;
   let steps = 0;
   const me = myFighter(G.view);
@@ -99,6 +101,14 @@ function simulate(dt) {
   while (G.acc >= DT && steps < 8) {
     G.acc -= DT; steps++;
     const f0 = toFrame(raw, G.last[0]);
+    if (G.mode === 'arena') {
+      // Võ Đài: một bước cho cả 4 cặp; người chơi điều khiển ô của mình
+      const mine = (pid) => (pid === G.pid && G.me >= 0 ? (steps === 1 ? f0 : Object.assign({}, f0, { pressed: {} })) : null);
+      G.T.step(mine);
+      for (const d of G.T.duels) { const e = d.world.takeEvents(); if (d.world === G.world && e.length) G.evBuf.push(...e); }
+      if (G.T.phase !== 'fight') break;
+      continue;
+    }
     let f1;
     if (G.mode === 'offline') f1 = G.bot.input(w);
     else {
@@ -138,11 +148,13 @@ function tickGame(dt, now) {
     }
   }
   let netInfo = null;
+  if (G.mode === 'arena') { netInfo = arenaInfo(); arenaWatch(); }
   if (room && G.mode !== 'offline') netInfo = `${G.mode === 'host' ? 'Chủ phòng' : 'Khách'} • ping ${Math.round(room.rtt)}ms`;
   R.draw(view, { dt, me: G.me, aim, netInfo });
   R.g.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   input.drawStick(R.g);
   input.updateButtons(me);
+  if (G && G.mode.startsWith('arena')) return;
   if (view.phase === 'over' && !G.resultShown) {
     G.resultShown = true;
     setTimeout(() => { if (G && G.view && G.view.phase === 'over') showResult(); }, 1600);
@@ -207,6 +219,7 @@ function home() {
     <div class="logo"><span>LEGACY</span><b>ĐẤU TRƯỜNG</b><small>Đối kháng 1v1 • điểm văng % • rơi đài</small></div>
     <label class="name-row">Tên của bạn <input id="nm" maxlength="14" placeholder="Đấu sĩ" value="${esc(prefs.name)}"></label>
     <div class="menu">
+      <button class="big arena-btn" id="b-arena">🏟 Võ Đài 8 người</button>
       <button class="big" id="b-off">🤖 Đấu với máy</button>
       <button class="big" id="b-host">🌐 Tạo phòng online</button>
       <div class="join-row"><input id="code" maxlength="6" placeholder="MÃ PHÒNG" autocomplete="off"><button id="b-join">Vào phòng</button></div>
@@ -217,6 +230,7 @@ function home() {
   const saveName = () => { prefs.name = $('#nm').value.trim().slice(0, 14); persist(); };
   $('#nm').onchange = saveName;
   $('#b-off').onclick = () => { saveName(); offlineSelect(); };
+  $('#b-arena').onclick = () => { saveName(); arenaSetup(); };
   $('#b-host').onclick = () => { saveName(); hostRoom(); };
   $('#b-join').onclick = () => { saveName(); joinRoom($('#code').value.trim().toUpperCase()); };
   $('#code').onkeydown = (e) => { if (e.key === 'Enter') $('#b-join').click(); };
@@ -300,17 +314,17 @@ function help() {
 
 function openPause() {
   if (!G) return;
-  const off = G.mode === 'offline';
+  const off = G.mode === 'offline' || G.mode === 'arena';
   if (off) G.paused = true;
   const el = document.createElement('div');
   el.className = 'pause';
   el.innerHTML = `<div class="card"><h3>${off ? 'Tạm dừng' : 'Menu'}</h3>
-    ${off ? '<button class="big" id="p-res">▶ Tiếp tục</button><button id="p-re">↻ Đấu lại</button>' : '<button class="big" id="p-res">▶ Quay lại trận</button>'}
+    ${off ? '<button class="big" id="p-res">▶ Tiếp tục</button>' + (G.mode === 'offline' ? '<button id="p-re">↻ Đấu lại</button>' : '') : '<button class="big" id="p-res">▶ Quay lại trận</button>'}
     <button id="p-quit">${off ? '⏏ Về menu' : '🏳 Rời trận (xử thua)'}</button></div>`;
   hud.appendChild(el);
   const close = () => { el.remove(); if (G) G.paused = false; lastT = performance.now(); };
   $('#p-res', el).onclick = close;
-  if (off) $('#p-re', el).onclick = () => { el.remove(); startOffline(); };
+  if (G.mode === 'offline') $('#p-re', el).onclick = () => { el.remove(); startOffline(); };
   $('#p-quit', el).onclick = () => {
     el.remove();
     if (G && G.mode !== 'offline' && room) room.send({ t: 'quit' });
@@ -519,6 +533,137 @@ function maybeStart() {
   lobby.ready = [false, false];
   const world = new World(cfg);
   beginGame({ mode: 'host', world, me: 0, cfg });
+}
+
+// ====================================================================
+// Võ Đài 8 người (offline: bạn + 7 bot có tính cách)
+// ====================================================================
+let AT = null; // giải đang chơi
+const ME = () => AT && AT.ps.find((p) => p.human);
+function arenaSetup() {
+  showScreen(`
+  <div class="screen select">
+    <div class="top"><button class="back" id="back">← Menu</button><h2>🏟 Võ Đài 8 người</h2></div>
+    <div class="card intro">8 đấu sĩ, mỗi người <b>${RULES.hp} Máu Võ Đài</b>. Mỗi vòng ghép 4 cặp 1v1 (${RULES.stocks} mạng, ${RULES.roundTime}s, sàn cháy và thu hẹp dần). Thua mất Máu; về 0 bị loại. Trước vòng 1, 3, 5, 7, 9 chọn <b>Lõi Nâng Cấp</b>; giữa mọi vòng mua <b>trang bị</b>. Người cuối cùng trụ lại vô địch.</div>
+    <div class="cols">
+      <div class="col"><h4>Tướng của bạn (giữ cả giải)</h4>${heroGrid(prefs.hero, 'g-me')}<div id="d-me">${heroDetail(prefs.hero)}</div></div>
+      <div class="col side">
+        <h4>Độ khó bot</h4><select id="s-lv">${Object.entries(BOT_LEVELS).map(([k, v]) => opt(k, v.name, prefs.level === 'dummy' ? 'normal' : prefs.level)).join('')}</select>
+        <p class="hint">7 bot nhận tướng và tính cách ngẫu nhiên (${Object.values(PERSONAS).map((p) => p.icon + ' ' + p.name).join(', ')}).</p>
+        <button class="big go" id="go">⚔ BẮT ĐẦU GIẢI</button>
+      </div>
+    </div>
+  </div>`);
+  $('#back').onclick = home;
+  bindGrid($('#g-me'), (h) => { prefs.hero = h; persist(); $('#d-me').innerHTML = heroDetail(h); });
+  $('#s-lv').onchange = (e) => { prefs.level = e.target.value; persist(); };
+  $('#go').onclick = () => {
+    const lv = prefs.level === 'dummy' ? 'normal' : prefs.level;
+    const bots = Array.from({ length: 7 }, () => ({ level: lv }));
+    AT = new Tournament({ players: [{ human: true, name: prefs.name || 'Bạn', hero: prefs.hero }, ...bots] });
+    arenaPrep();
+  };
+}
+const statLine = (m) => Object.keys(STAT_LABEL).filter((k) => m[k]).map((k) => `<span class="st">${STAT_LABEL[k][0].split(' (')[0]} <b>${STAT_LABEL[k][1] === '%' ? (m[k] > 0 ? '+' : '') + Math.round(m[k] * 100) + '%' : '+' + m[k]}</b></span>`).join('') || '<span class="st">Chưa có chỉ số cộng thêm</span>';
+function standingsHtml() {
+  return `<div class="stand">${AT.standings().map((p) => `<div class="sp ${p.alive ? '' : 'out'} ${p.human ? 'me' : ''}" style="--c:${HEROES[p.hero].color}">
+    <i>${HEROES[p.hero].name[0]}</i><b>${esc(p.name)}</b><span class="hpbar"><em style="width:${(p.hp / RULES.hp) * 100}%"></em></span><small>${p.alive ? '❤ ' + p.hp : '#' + p.place}</small>
+    <span class="its">${p.augs.map((a) => AUGS[a].icon).join('')}${p.items.map((i) => ITEMS[i].icon).join('')}</span></div>`).join('')}</div>`;
+}
+function arenaPrep() {
+  endGame();
+  const me = ME();
+  if (!me.alive) { arenaStartRound(); return; }
+  const owned = new Set(me.items);
+  const shop = [1, 2, 3].map((t) => `<h5>Bậc ${'I'.repeat(t)}</h5><div class="items">${ITEM_IDS.filter((id) => ITEMS[id].tier === t).map((id) => {
+    const it = ITEMS[id], has = owned.has(id), can = !has && me.gold >= it.price && me.items.length < MAX_ITEMS;
+    return `<button class="item ${has ? 'own' : ''}" data-buy="${id}" ${can ? '' : 'disabled'} title="${esc(it.desc)}"><i>${it.icon}</i><b>${it.name}</b><small>${modText(it.mods)}</small><p>${it.desc}</p><em>💰 ${it.price}</em></button>`;
+  }).join('')}</div>`).join('');
+  showScreen(`
+  <div class="screen arena">
+    <div class="top"><button class="back" id="quit">⏏ Bỏ giải</button><h2>Vòng ${AT.round} <small>• ❤ ${me.hp} Máu Võ Đài • 💰 ${me.gold} vàng</small></h2>
+      <button class="big go" id="ready" ${me.offer ? 'disabled' : ''}>⚔ VÀO TRẬN</button></div>
+    ${me.offer ? `<div class="augs-wrap"><h4>✨ Chọn 1 Lõi Nâng Cấp ${['', 'Bạc', 'Vàng', 'Lăng Kính'][AUGS[me.offer[0]].tier]} ${me.rerolls ? '<button id="reroll">🎲 Đổi lại (1 lần)</button>' : ''}</h4>
+      <div class="augs">${me.offer.map((id) => { const a = AUGS[id]; return `<button class="aug t${a.tier}" data-aug="${id}"><i>${a.icon}</i><b>${a.name}</b><p>${a.desc}</p></button>`; }).join('')}</div></div>` : ''}
+    <div class="cols">
+      <div class="col">
+        <h4>Của bạn — ${HEROES[me.hero].name}</h4>
+        <div class="mine">${me.augs.map((a) => `<span class="chip aug t${AUGS[a].tier}" title="${esc(AUGS[a].desc)}">${AUGS[a].icon} ${AUGS[a].name}</span>`).join('')}
+          ${me.items.map((i) => `<button class="chip" data-sell="${i}" title="Bán lấy ${Math.floor(ITEMS[i].price * RULES.sellBack)} vàng">${ITEMS[i].icon} ${ITEMS[i].name} ✕</button>`).join('')} <small>(${me.items.length}/${MAX_ITEMS} trang bị — bấm để bán)</small></div>
+        <div class="stats">${statLine(sumMods(me.items.concat(me.augs)))}</div>
+        <h4>🛒 Cửa hàng</h4>${shop}
+      </div>
+      <div class="col side"><h4>Bảng Máu Võ Đài</h4>${standingsHtml()}</div>
+    </div>
+  </div>`);
+  $('#quit').onclick = () => { AT = null; home(); };
+  for (const b of ui.querySelectorAll('[data-aug]')) b.onclick = () => { AT.pickAug(me, b.dataset.aug); sfx('ui'); arenaPrep(); };
+  for (const b of ui.querySelectorAll('[data-buy]')) b.onclick = () => { if (AT.buy(me, b.dataset.buy)) sfx('ui'); arenaPrep(); };
+  for (const b of ui.querySelectorAll('[data-sell]')) b.onclick = () => { AT.sell(me, b.dataset.sell); arenaPrep(); };
+  const rr = $('#reroll'); if (rr) rr.onclick = () => { AT.reroll(me); arenaPrep(); };
+  $('#ready').onclick = () => { if (AT.setReady(me)) arenaStartRound(); };
+}
+function arenaStartRound() {
+  AT.start();
+  const me = ME(), d = me.alive ? AT.duelOf(me.id) : AT.duels[0];
+  const slot = me.alive ? (d.a === me.id ? 0 : 1) : -1;
+  beginGame({ mode: 'arena', T: AT, pid: me.id, world: d.world, me: slot, watch: d.i, cfg: { heroes: [d.world.s.fighters[0].hero, d.world.s.fighters[1].hero] } });
+  if (slot < 0) { input.enabled = false; hud.querySelector('.touch-layer')?.remove(); }
+  arenaBar();
+}
+// thanh trên cùng: thông tin vòng + nút xem cặp khác / bỏ qua
+function arenaBar() {
+  const el = document.createElement('div');
+  el.className = 'arena-bar';
+  el.innerHTML = `<button id="ab-watch" class="hb">👁 Xem cặp khác</button><button id="ab-ff" class="hb">⏩ Bỏ qua</button>`;
+  hud.appendChild(el);
+  $('#ab-watch').onclick = () => arenaSwitch();
+  $('#ab-ff').onclick = () => { const md = G && G.T.duelOf(G.pid); if (md && !md.done && G.me >= 0) { toast('Đang đấu — hãy đánh xong trận của bạn!'); return; } G.T.fastForward(); };
+}
+function arenaSwitch(dir = 1) {
+  if (!G) return;
+  const L = G.T.duels; let i = G.watch;
+  for (let k = 0; k < L.length; k++) { i = (i + dir + L.length) % L.length; if (!L[i].done || k === L.length - 1) break; }
+  const mine = G.T.duelOf(G.pid);
+  G.watch = i; G.world = L[i].world; G.me = mine && mine === L[i] && ME().alive ? (mine.a === G.pid ? 0 : 1) : -1;
+  input.enabled = G.me >= 0;
+  R.reset(); G.view = packView(G.world.s);
+}
+function arenaInfo() {
+  const me = ME(), d = G.T.duels[G.watch];
+  const P = (id, gh) => (gh || G.T.get(id));
+  const nm = d ? `${esc(P(d.a).name)} vs ${esc(d.ghost ? d.ghost.name : P(d.b).name)}` : '';
+  return `Vòng ${G.T.round} • ❤ ${me.hp} • ${G.me < 0 ? '👁 ' + nm : 'Đang đấu'} • còn ${G.T.duels.filter((x) => !x.done).length}/${G.T.duels.length} cặp`;
+}
+// theo dõi: trận của mình xong → chuyển xem cặp khác; cả vòng xong → bảng kết quả
+function arenaWatch() {
+  const T = G.T;
+  if (T.phase !== 'fight') { const t = T; setTimeout(() => arenaRoundEnd(t), 900); G.mode = 'arena-done'; return; }
+  const mine = T.duelOf(G.pid);
+  if (G.me >= 0 && mine && mine.done) {
+    const won = mine.res.winner === G.pid;
+    toast(won ? '🏆 Thắng vòng! Đang chờ các cặp khác…' : `💔 Thua vòng: −${mine.res.loss} Máu Võ Đài. Đang chờ các cặp khác…`, 3000);
+    arenaSwitch();
+  } else if (G.me < 0 && T.duels[G.watch].done && T.duels.some((x) => !x.done)) arenaSwitch();
+}
+function arenaRoundEnd(T) {
+  if (T !== AT) return;
+  endGame();
+  const me = ME();
+  const rows = T.duels.map((d) => { const w = d.res.winner, l = d.res.loser; const nm = (id) => (id === -1 && d.ghost ? d.ghost.name : esc(T.get(id).name));
+    return `<div class="duel-res">🏆 <b>${nm(w)}</b> thắng ${nm(l)} ${d.res.loss ? `<span class="loss">−${d.res.loss} ❤</span>` : ''}</div>`; }).join('');
+  const over = T.phase === 'over';
+  showScreen(`
+  <div class="screen arena center-col">
+    <h2>${over ? (me.place === 1 ? '🏆 VÔ ĐỊCH VÕ ĐÀI!' : `Kết thúc giải — hạng ${me.place}/8`) : `Kết quả vòng ${T.round}`}</h2>
+    ${!over && !me.alive ? `<p class="err">Bạn đã bị loại (hạng ${me.place}). Có thể tiếp tục xem giải.</p>` : ''}
+    <div class="card">${rows}</div>
+    <h4>Bảng Máu Võ Đài</h4>${standingsHtml()}
+    <div class="row">${over ? '<button class="big go" id="again">↻ Giải mới</button><button id="menu">⏏ Về menu</button>' : `<button class="big go" id="next">${me.alive ? '➜ Mua sắm & vòng tiếp' : '👁 Xem vòng tiếp'}</button><button id="menu">⏏ Bỏ giải</button>`}</div>
+  </div>`);
+  const n = $('#next'); if (n) n.onclick = () => { T.next(); arenaPrep(); };
+  const a = $('#again'); if (a) a.onclick = arenaSetup;
+  $('#menu').onclick = () => { AT = null; home(); };
 }
 
 // ====================================================================

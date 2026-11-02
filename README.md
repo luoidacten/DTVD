@@ -48,6 +48,17 @@ Thêm tướng: viết object trong `src/engine/heroes*.js` (chiêu là sự ki�
 
 Cân bằng: `src/engine/balance.js` là hệ số sát thương/lực văng/trọng lượng theo tướng, sinh bởi `node tools/autobal.mjs [vòng] [trận mỗi cặp]` (bot đấu bot mọi cặp, kéo tỉ lệ thắng về 50%). Có thể chỉnh tay.
 
+## 🏟 Võ Đài 8 người (tham khảo Võ Đài của Liên Minh)
+
+- 8 đấu sĩ solo, mỗi người 20 **Máu Võ Đài**, giữ 1 tướng cả giải. Thiếu người thì bot có tính cách lấp chỗ.
+- Mỗi vòng ghép **4 cặp 1v1 đấu cùng lúc** (2 mạng, 75s). Từ giây 25 **mép sàn cháy và thu hẹp** dần tới 50%. Hoa năng lượng 🌸 mọc trên sàn: chạm vào giảm 15% điểm văng.
+- Thua vòng mất `2 + vòng/2 + số mạng đối thủ còn lại` Máu. Về 0 bị loại. Số người lẻ thì người dư đấu với **bóng ma** (bản sao một người đã bị loại).
+- Trước vòng 1, 3, 5, 7, 9: chọn 1 trong 3 **Lõi Nâng Cấp** (Bạc → Vàng → Lăng Kính), được đổi lại 1 lần. 36 lõi.
+- Giữa mọi vòng: **cửa hàng trang bị** (tối đa 6 món, bán lại 70%). 35 món, 3 bậc: chuyển từ Legacy + món mới. Món "kích hoạt" của Legacy thành tự kích hoạt (Bình Phản Lực, Vương Miện, Đồng Hồ Cát…).
+- **Chỉ số:** Sát thương, Lực văng, **Nặng** (giảm lực văng nhận), **Kiên Cường** (giảm điểm văng nhận), **Chí Mạng**, **Sát thương Chí Mạng** (x1.5 + chỉ số; lực văng tăng nửa mức đó), Tốc chạy, Giảm hồi chiêu, Tích nộ, Kháng khống chế, Mạng.
+- Bot: 6 tính cách (Hổ Báo, Lì Lợm, Ám Sát, Con Bạc, Võ Sĩ Danh Dự, Chuột Lũi) quyết định độ hung hăng, sợ mép, cách chọn lõi và mua đồ.
+- Code: `src/engine/loot.js` (chỉ số, trang bị, lõi), `src/engine/tournament.js` (giải đấu, không phụ thuộc DOM), giao diện trong `src/game/main.js`. Kiểm tra: `npm run arena` (mô phỏng 20 giải 8 bot), `node tools/arena-smoke.cjs <url>`.
+
 ## Online
 
 1. Người A bấm **Tạo phòng online** → nhận mã 6 ký tự (và link `?room=MÃ`).

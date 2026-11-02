@@ -1,6 +1,6 @@
 // ===== Vẽ trận đấu bằng Canvas 2D =====
 // Chỉ đọc "view" (xem engine/view.js). Hiệu ứng hạt chạy riêng ở client, không ảnh hưởng gameplay.
-import { ARENAS } from '../engine/arena.js';
+import { ARENAS, arenaAt } from '../engine/arena.js';
 import { HEROES } from '../engine/heroes.js';
 import { TAU, clamp, lerp, deg } from '../engine/math.js';
 
@@ -105,14 +105,22 @@ export class Renderer {
     if (this.shakeP > 0.3) { sx = (Math.random() - 0.5) * this.shakeP; sy = (Math.random() - 0.5) * this.shakeP; this.shakeP *= Math.exp(-dt * 9); } else this.shakeP = 0;
     const c = this.cam;
     g.setTransform(this.dpr * c.s, 0, 0, this.dpr * c.s, this.dpr * (this.W / 2 - c.x * c.s + sx), this.dpr * (this.H / 2 - c.y * c.s + sy));
-    this.drawArena(A);
+    const sc = view.sc || 1;
+    if (sc < 0.999) {
+      // sàn đang thu hẹp: vẽ sàn gốc tối đi, phần mới bên trong, viền lửa ở mép
+      g.globalAlpha = 0.25; this.drawArena(A); g.globalAlpha = 1;
+      const S = arenaAt(view.arena, sc);
+      this.drawArena(S);
+      g.save(); g.strokeStyle = `rgba(255,${100 + Math.floor(60 * Math.sin(view.t * 8))},40,0.95)`; g.lineWidth = 8; g.shadowColor = '#ff5a1a'; g.shadowBlur = 18;
+      g.beginPath(); if (S.poly) { S.poly.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); } else g.ellipse(0, 0, S.a, S.b, 0, 0, TAU); g.stroke(); g.restore();
+    } else this.drawArena(A);
     this.drawZones(view, A);
     // bóng + vòng đội
     for (const f of view.f) this.drawShadow(f, o);
     if (o.aim) this.drawAim(o.aim);
     const items = [];
     for (const f of view.f) items.push({ y: f.y, f });
-    for (const p of A.pillars) items.push({ y: p.y, pil: p });
+    for (const p of (view.sc < 0.999 ? arenaAt(view.arena, view.sc) : A).pillars) items.push({ y: p.y, pil: p });
     items.sort((a, b) => a.y - b.y);
     for (const it of items) { if (it.f) this.drawFighter(it.f, view, o); else this.drawPillar(it.pil, A); }
     this.drawEnts(view, o);

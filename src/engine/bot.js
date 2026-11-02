@@ -12,8 +12,9 @@ export const BOT_LEVELS = {
 };
 
 export class Bot {
-  constructor(slot, level = 'normal', seed = 1) {
+  constructor(slot, level = 'normal', seed = 1, persona = null) {
     this.slot = slot; this.dummy = level === 'dummy'; this.L = BOT_LEVELS[level] || BOT_LEVELS.normal;
+    if (persona) this.L = Object.assign({}, this.L, { aggr: Math.min(1, this.L.aggr * persona.aggr), edge: this.L.edge * persona.edge, react: this.L.react / Math.max(0.8, persona.aggr) });
     this.think = 0; this.strafe = 1; this.strafeT = 0; this.holdKey = null; this.holdT = 0;
     this.mx = 0; this.my = 0; this.press = null;
     let s = seed >>> 0 || 1;
@@ -67,6 +68,9 @@ export class Bot {
       // né cột chặn đường
       const c = blockedBy(A, me.x, me.y, foe.x, foe.y, me.r);
       if (c && ranged) { vx += -uy * this.strafe; vy += ux * this.strafe; }
+      // hoa năng lượng: điểm văng cao thì đi ăn
+      const fl = w.s.ents.find((e) => e.kind === 'flower');
+      if (fl && me.percent > 45 && Math.hypot(fl.x - me.x, fl.y - me.y) < d + 60) { const fd = Math.hypot(fl.x - me.x, fl.y - me.y) || 1; vx = (fl.x - me.x) / fd * 1.5; vy = (fl.y - me.y) / fd * 1.5; }
       // né đạn đang bay tới
       const thr = this.threat(w, me);
       if (thr && this.rng() < L.dodge) { vx = thr.x * 2.5 + vx * 0.3; vy = thr.y * 2.5 + vy * 0.3; }

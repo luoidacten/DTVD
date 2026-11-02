@@ -2,7 +2,8 @@
 // Toàn bộ trạng thái nằm trong `w.s` là dữ liệu thuần (không hàm, không tham chiếu vòng)
 // → host gửi nguyên snapshot cho máy kia, renderer vẽ cùng một kiểu dữ liệu cho offline/online.
 import { TAU, clamp, angDiff, deg, makeRng } from './math.js';
-import { ARENAS, edgeDist, clampInside } from './arena.js';
+import { ARENAS, arenaAt, edgeDist, clampInside } from './arena.js';
+import { PERKS, sumMods } from './loot.js';
 import { HEROES } from './heroes.js';
 import { BAL } from './balance.js';
 
@@ -23,16 +24,21 @@ export class World {
   constructor(opts) {
     const o = Object.assign({ arena: 'go', stocks: 3, timeLimit: 180, seed: (Math.random() * 2 ** 32) >>> 0, heroes: ['valerius', 'gideon'], names: ['P1', 'P2'] }, opts);
     this.rng = makeRng(o.seed);
+    this.o = o; // perks: [[id...],[id...]] trang bị + lõi • mods: chỉ số cộng thêm • ring: { start, end, min } sàn thu hẹp • flowers: hoa năng lượng
     this.s = {
       v: 1, tick: 0, t: 0, clock: 0, arena: o.arena, stocks: o.stocks, timeLimit: o.timeLimit,
       phase: 'countdown', cdT: 3, winner: null, endReason: null, nextId: 1,
-      fighters: [], projs: [], zones: [], ents: [], evId: 0,
+      fighters: [], projs: [], zones: [], ents: [], evId: 0, sc: 1, flT: 8,
     };
     this.events = []; // sự kiện hình/âm (không ảnh hưởng gameplay)
     for (let i = 0; i < 2; i++) this.s.fighters.push(this.makeFighter(i, o.heroes[i], o.names[i]));
-    for (const f of this.s.fighters) this.place(f);
+    for (const f of this.s.fighters) { f.stocks += f.m.stocks || 0; this.place(f); this.perkLife(f); }
   }
-  get A() { return ARENAS[this.s.arena]; }
+  get A() { return this.s.sc < 0.999 ? arenaAt(this.s.arena, this.s.sc) : ARENAS[this.s.arena]; }
+  // ---------- trang bị / lõi ----------
+  perks(f) { return f.pk.map((id) => PERKS[id]).filter(Boolean); }
+  perkLife(f) { for (const P of this.perks(f)) if (P.life) P.life(this, f); }
+  cdK(f) { return CD_SCALE * (1 - (f.m.cdr || 0)); }
   id() { return this.s.nextId++; }
   rand(a = 0, b = 1) { return a + this.rng() * (b - a); }
   ev(type, data) { this.events.push(Object.assign({ id: ++this.s.evId, type }, data)); }
@@ -50,7 +56,9 @@ export class World {
       cd: { A: 0, B: 0, C: 0, D: 0, U: 0 }, st: {}, act: null, dash: null, charge: null, buf: null,
       hitstun: 0, invuln: 0, falling: 0, respawn: 0, dead: false, flash: 0,
       ws: {}, lastHitBy: 0, stats: { dealt: 0, taken: 0, kos: 0, hits: 0 },
+      pk: ((this.o.perks || [])[slot] || []).slice(), pw: {},
     };
+    f.m = sumMods(f.pk, (this.o.mods || [])[slot]);
     if (H.init) H.init(f, this);
     return f;
   }
@@ -68,10 +76,11 @@ export class World {
   weight(f) {
     let w = this.H(f).weight * (f.st.heavy ? 1 + f.st.heavy.p : 1) * ((BAL[f.hero] && BAL[f.hero].w) || 1);
     if (f.st.poison) w *= 1 - 0.05 * f.st.poison.n;
+    w *= Math.max(0.5, 1 + (f.m.wt || 0));
     return w;
   }
   speed(f) {
-    let s = BASE_SPEED * this.H(f).speed;
+    let s = BASE_SPEED * this.H(f).speed * Math.max(0.5, 1 + (f.m.spd || 0));
     if (f.st.haste) s *= 1 + f.st.haste.p;
     if (f.st.slow) s *= 1 - f.st.slow.p;
     return s;
@@ -157,6 +166,7 @@ export class World {
       return;
     }
     if (type === 'petrify') { f.vx = 0; f.vy = 0; }
+    if (bad && f.m && f.m.ccr && type !== 'burn' && type !== 'bleed' && type !== 'poison') dur *= Math.max(0.3, 1 - f.m.ccr);
     if (s) { s.t = Math.max(s.t, dur); s.p = Math.max(s.p, p); s.max = Math.max(s.max, dur); }
     else f.st[type] = { t: dur, p, max: dur };
     if (type === 'stun' || type === 'grabbed' || type === 'sleep' || type === 'petrify' || type === 'charm') { this.cancelAct(f); }
@@ -216,9 +226,18 @@ export class World {
     const info = { dmgK: bal.d || 1, kbK: bal.k || 1, extra: null };
     if (AH.onDeal) AH.onDeal(this, att, t, h, info);
     if (TH.onTake) TH.onTake(this, t, att, h, info);
+    for (const P of this.perks(att)) if (P.deal) P.deal(this, att, t, h, info);
+    for (const P of this.perks(t)) if (P.take) P.take(this, t, att, h, info);
+    // Chí Mạng: nhân sát thương (1.5 + Sát thương Chí Mạng), lực văng tăng nửa mức đó
+    let crit = false;
+    if (!h.noCrit && (h.dmg || 0) > 0.5 && (this.rng() < (att.m.crit || 0) || this.perks(att).some((P) => P.forceCrit && P.forceCrit(t)))) {
+      crit = true; const c = 1.5 + (att.m.critD || 0); info.dmgK *= c; info.kbK *= 1 + (c - 1) * 0.5;
+      const cs = Math.max(0, ...this.perks(att).map((P) => P.critStun || 0));
+      if (cs) info.extra = ((x) => () => { if (x) x(); this.addStatus(t, 'stun', cs); })(info.extra);
+    }
     if (info.cancel) return false;
     if (att.st.invis) { const s = att.st.invis; delete att.st.invis; if (AH.onStatusEnd) AH.onStatusEnd(this, att, 'invis', s); }
-    let dmg = (h.dmg || 0) * DMG_SCALE * info.dmgK * (TH.taken || 1);
+    let dmg = (h.dmg || 0) * DMG_SCALE * info.dmgK * (TH.taken || 1) * (1 + (att.m.dmg || 0)) * Math.max(0.4, 1 - (t.m.ten || 0)) * (1 + (t.m.taken || 0));
     if (att.st.empower) dmg *= 1 + att.st.empower.p;
     const block = !h.unblock && t.st.block, armor = t.st.armor, immortal = t.st.immortal;
     if (block) dmg *= 0.2;
@@ -231,13 +250,14 @@ export class World {
     t.percent = Math.min(999, t.percent + dmg);
     att.stats.dealt += dmg; t.stats.taken += dmg; att.stats.hits++;
     t.lastHitBy = att.id;
-    att.rage = Math.min(100, att.rage + dmg * 0.32);
-    t.rage = Math.min(100, t.rage + dmg * 0.26);
+    att.rage = Math.min(100, att.rage + dmg * 0.32 * (1 + (att.m.rage || 0)));
+    t.rage = Math.min(100, t.rage + dmg * 0.26 * (1 + (t.m.rage || 0)));
+    if (crit) this.text(t.x, t.y - 64, 'CHÍ MẠNG!', '#ffb030', 17);
     let mag = 0;
     if (!h.noKnock && !immortal) {
       const src = h.src || att;
       const ang = h.angle ?? Math.atan2(t.y - src.y, t.x - src.x);
-      mag = ((h.kb || 0) + (h.kg || 0) * KG_SCALE * t.percent) * info.kbK / this.weight(t);
+      mag = ((h.kb || 0) + (h.kg || 0) * KG_SCALE * t.percent) * info.kbK * (1 + (att.m.kb || 0)) / this.weight(t);
       if (h.fixedKb) mag = h.fixedKb * info.kbK;
       if (block) mag *= 0.08;
       if (armor) mag *= armor.p || 1;
@@ -413,7 +433,7 @@ export class World {
       if (e.dead) continue;
       e.t += dt;
       const D = this.entDef(e);
-      if (!this.fighter(e.owner)) { e.dead = true; continue; }
+      if (e.owner && !this.fighter(e.owner)) { e.dead = true; continue; }
       if (D.update) D.update(this, e, dt);
       if (!e.dead && e.dur && e.t >= e.dur) { e.dead = true; if (D.onEnd) D.onEnd(this, e); }
     }
@@ -421,6 +441,24 @@ export class World {
   }
   // đòn đánh của vật triệu hồi (dùng owner để tính nội tại/thống kê)
   entHit(e, t, h) { const o = this.fighter(e.owner); return o ? this.hitAny(o, t, Object.assign({ src: e }, h)) : false; }
+
+  // ---------- hoa năng lượng: chạm vào giảm 15% điểm văng ----------
+  stepFlowers(dt) {
+    const s = this.s;
+    s.flT -= dt;
+    const fl = s.ents.filter((e) => e.kind === 'flower');
+    if (s.flT <= 0 && fl.length < 1) {
+      s.flT = 12;
+      const a = this.rand(0, TAU), d = this.rand(0, Math.min(this.A.hx, this.A.hy) * 0.55);
+      const p = { x: Math.cos(a) * d, y: Math.sin(a) * d }; clampInside(this.A, p, 40);
+      s.ents.push({ id: this.id(), kind: 'flower', owner: 0, team: -1, h: null, x: p.x, y: p.y, r: 14, t: 0, dur: 14, fa: 0 });
+    }
+    for (const e of fl) for (const f of s.fighters) if (this.alive(f) && Math.hypot(f.x - e.x, f.y - e.y) < f.r + e.r + 4) {
+      e.dead = true; f.percent = Math.max(0, f.percent - 15);
+      this.text(f.x, f.y - 50, '🌸 -15%', '#ffb0d0', 16); this.ev('fx', { kind: 'halo', x: e.x, y: e.y, r: 40, color: '#ffb0d0', life: 0.4 });
+      break;
+    }
+  }
 
   // ---------- vòng lặp ----------
   step(inputs) {
@@ -440,6 +478,13 @@ export class World {
       return;
     }
     s.clock += dt;
+    const ring = this.o.ring;
+    if (ring) {
+      const k = clamp((s.clock - ring.start) / (ring.end - ring.start), 0, 1);
+      const sc = Math.round((1 - k * (1 - ring.min)) * 200) / 200;
+      if (sc !== s.sc) { if (s.sc === 1 && sc < 1) this.ev('ring', {}); s.sc = sc; }
+    }
+    if (this.o.flowers) this.stepFlowers(dt);
     for (const f of s.fighters) this.stepFighter(f, dt, inputs[f.slot] || EMPTY_INPUT);
     this.stepProjs(dt);
     this.stepZones(dt);
@@ -477,8 +522,9 @@ export class World {
       if (f.respawn <= 0) this.doRespawn(f);
       return;
     }
-    if (this.s.phase === 'fight') f.rage = Math.min(100, f.rage + 0.35 * dt);
+    if (this.s.phase === 'fight') f.rage = Math.min(100, f.rage + 0.35 * dt * (1 + (f.m.rage || 0)));
     if (H.update) H.update(this, f, dt, inp);
+    for (const P of this.perks(f)) if (P.tick) P.tick(this, f, dt, inp);
 
     // --- hành động đang diễn ra ---
     if (f.act) {
@@ -529,8 +575,9 @@ export class World {
         ctx.p = clamp(c.t / sk.hold, 0, 1);
         f.facing = ctx.ang;
         sk.cast(this, f, ctx);
-        if (!sk.manualCd) f.cd[c.key] = (sk.cd || 0) * CD_SCALE;
+        if (!sk.manualCd) f.cd[c.key] = (sk.cd || 0) * this.cdK(f);
         this.ev('cast', { fid: f.id, key: c.key });
+        for (const P of this.perks(f)) if (P.cast) P.cast(this, f, c.key);
       }
       return;
     }
@@ -558,8 +605,9 @@ export class World {
     f.facing = ctx.ang;
     if (k === 'U') { f.rage = 0; this.ev('ult', { fid: f.id, name: sk.name }); }
     sk.cast(this, f, ctx);
-    if (!sk.manualCd) f.cd[k] = Math.max(f.cd[k], (sk.cd || 0) * CD_SCALE);
+    if (!sk.manualCd) f.cd[k] = Math.max(f.cd[k], (sk.cd || 0) * this.cdK(f));
     this.ev('cast', { fid: f.id, key: k });
+    for (const P of this.perks(f)) if (P.cast) P.cast(this, f, k);
   }
 
   physics(f, dt, inp) {
@@ -656,11 +704,12 @@ export class World {
   startFall(f) {
     const H = this.H(f);
     if (H.onFall && H.onFall(this, f) === false) return;
+    for (const P of this.perks(f)) if (P.fall && P.fall(this, f) === false) { clampInside(this.A, f, f.r); return; }
     f.falling = 0.8; f.act = null; f.charge = null; f.dash = null;
     const sp = Math.hypot(f.vx, f.vy);
     if (sp < 120) { const a = Math.atan2(f.y, f.x); f.vx = Math.cos(a) * 120; f.vy = Math.sin(a) * 120; }
     const killer = this.fighter(f.lastHitBy);
-    if (killer && killer !== f) killer.stats.kos++;
+    if (killer && killer !== f) { killer.stats.kos++; for (const P of this.perks(killer)) if (P.kill) P.kill(this, killer, f); }
     this.ev('ko', { fid: f.id, x: f.x, y: f.y, a: Math.atan2(f.vy, f.vx), color: f.slot === 0 ? '#5aa9ff' : '#ff5a5a' });
     this.ev('shake', { p: 18 });
   }
@@ -679,7 +728,7 @@ export class World {
   }
   doRespawn(f) {
     const H = this.H(f);
-    const keep = { stats: f.stats, rage: f.rage, stocks: f.stocks, name: f.name };
+    const keep = { stats: f.stats, rage: f.rage, stocks: f.stocks, name: f.name, pw: f.pw, m: f.m };
     const nf = this.makeFighter(f.slot, f.hero, f.name);
     Object.assign(f, nf, keep);
     // vào lại từ trên cao ở phía mình
@@ -687,6 +736,7 @@ export class World {
     f.z = 160; f.vz = 0; f.invuln = 2;
     clampInside(this.A, f, 40);
     this.ev('respawn', { fid: f.id, x: f.x, y: f.y });
+    this.perkLife(f);
     if (H.onRespawn) H.onRespawn(this, f);
   }
   end(winnerSlot, reason) {

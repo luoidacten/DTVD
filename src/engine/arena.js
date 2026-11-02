@@ -110,3 +110,27 @@ export function blockedBy(A, ax, ay, bx, by, pad = 0) {
   }
   return null;
 }
+
+// Sàn thu hẹp (Võ Đài): bản sao tỉ lệ k của sàn gốc, có cache theo bước 0.005
+const SCALED = new Map();
+export function arenaAt(id, k = 1) {
+  const D = DEFS[id];
+  if (!D || k >= 0.999) return D;
+  const kk = Math.round(k * 200) / 200, key = id + ':' + kk;
+  let S = SCALED.get(key);
+  if (S) return S;
+  S = Object.assign({}, D, { scaled: kk });
+  if (D.poly) {
+    S.poly = D.poly.map(([x, y]) => [x * kk, y * kk]);
+    S.edges = S.poly.map((p, i) => {
+      const q = S.poly[(i + 1) % S.poly.length];
+      const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy);
+      return { x: p[0], y: p[1], nx: -dy / L, ny: dx / L };
+    });
+  } else { S.a = D.a * kk; S.b = D.b * kk; S.r = D.r && D.r * kk; }
+  S.hx = D.hx * kk; S.hy = D.hy * kk;
+  S.pillars = D.pillars.filter((p) => edgeDist(S, p.x, p.y) > p.r);
+  if (SCALED.size > 2000) SCALED.clear();
+  SCALED.set(key, S);
+  return S;
+}

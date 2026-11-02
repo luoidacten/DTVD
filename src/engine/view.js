@@ -8,7 +8,7 @@ const WS_KEYS = ['ammo', 'reload', 'exp', 'ki', 'stk', 'emp', 'grab', 'mark', 'l
 export function packView(s) {
   return {
     tick: s.tick, t: r2(s.t), clock: r1(s.clock), phase: s.phase, cdT: r2(s.cdT), winner: s.winner, endReason: s.endReason,
-    arena: s.arena, stocks: s.stocks, timeLimit: s.timeLimit,
+    arena: s.arena, stocks: s.stocks, timeLimit: s.timeLimit, sc: s.sc,
     f: s.fighters.map(packFighter),
     p: s.projs.map((p) => [p.id, p.kind, r0(p.x), r0(p.y), r2(Math.atan2(p.vy, p.vx)), r1(p.r), p.color, p.team]),
     z: s.zones.map((z) => [z.id, z.kind, r0(z.x), r0(z.y), r0(z.r), r2(z.t), z.delay || 0, z.dur, z.team, z.color]),
@@ -24,7 +24,7 @@ function packFighter(f) {
   const a = f.act;
   return {
     id: f.id, slot: f.slot, hero: f.hero, name: f.name, x: r1(f.x), y: r1(f.y), z: r1(f.z), fa: r2(f.facing), r: f.r,
-    pc: r1(f.percent), sk: f.stocks, rg: r1(f.rage), cd: { A: r2(f.cd.A), B: r2(f.cd.B), C: r2(f.cd.C), D: r2(f.cd.D), U: r2(f.cd.U) },
+    pc: r1(f.percent), sk: f.stocks, pk: f.pk, rg: r1(f.rage), cd: { A: r2(f.cd.A), B: r2(f.cd.B), C: r2(f.cd.C), D: r2(f.cd.D), U: r2(f.cd.U) },
     st, ws, act: a ? [a.key, r2(a.t), r2(a.dur), a.anim, r2(a.ang)] : 0, ch: f.charge ? [f.charge.key, r2(f.charge.t)] : 0,
     mv: f.mvx || f.mvy ? 1 : 0, hs: f.hitstun > 0 ? 1 : 0, inv: f.invuln > 0 ? 1 : 0, fall: r2(f.falling), rsp: r2(f.respawn), dead: f.dead ? 1 : 0,
     fl: f.flash > 0 ? 1 : 0, dash: f.dash ? 1 : 0, stats: { dealt: r1(f.stats.dealt), taken: r1(f.stats.taken), kos: f.stats.kos, hits: f.stats.hits },

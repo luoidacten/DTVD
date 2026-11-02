@@ -122,3 +122,43 @@ body.touch .mob-only { display: inline-block; }
   .tb-U { width: 52px; height: 52px; right: calc(max(22px, env(safe-area-inset-right)) + 140px); bottom: 80px; }
   .cancel-zone { bottom: 160px; }
 }
+
+/* ---- Võ Đài ---- */
+.arena-btn { background: linear-gradient(180deg, #6a4a10, #3a2808) !important; border-color: #ffd24a !important; }
+.intro { margin-bottom: 10px; line-height: 1.5; }
+.screen.arena .top h2 small { color: var(--mut); font-weight: 400; font-size: 0.7em; }
+.screen.arena .top .go { margin: 0; }
+.center-col { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+.center-col .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.augs-wrap h4 { color: var(--acc); }
+.augs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.aug { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px; border-width: 2px; }
+.aug i { font-style: normal; font-size: 26px; }
+.aug p { margin: 0; color: #c8d4e6; font-size: 0.88em; }
+.aug.t1 { border-color: #b8c4d4; } .aug.t2 { border-color: #ffd24a; } .aug.t3 { border-color: #d070ff; box-shadow: 0 0 12px rgba(208,112,255,0.35); }
+.items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.item { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px; font-size: 0.85em; }
+.item i { font-style: normal; font-size: 20px; }
+.item small { color: #8fd0ff; }
+.item p { margin: 0; color: #a8b4c6; font-size: 0.9em; }
+.item em { font-style: normal; color: var(--acc); }
+.item.own { border-color: #6fe08f; }
+h5 { margin: 10px 0 4px; color: var(--mut); }
+.mine { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { padding: 4px 8px; border-radius: 14px; font-size: 0.85em; background: var(--panel2); border: 1px solid var(--line); }
+.chip.aug { border-width: 2px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.st { background: #0f1622; border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 0.82em; color: var(--mut); }
+.st b { color: #8fd0ff; }
+.stand { display: flex; flex-direction: column; gap: 4px; }
+.sp { display: grid; grid-template-columns: 26px 1fr 60px auto; grid-template-rows: auto auto; align-items: center; gap: 0 6px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 8px; padding: 4px 8px; font-size: 0.85em; }
+.sp i { grid-row: span 2; width: 24px; height: 24px; border-radius: 50%; background: var(--c); color: #0b1018; display: grid; place-items: center; font-style: normal; font-weight: 900; }
+.sp .hpbar { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+.sp .hpbar em { display: block; height: 100%; background: linear-gradient(90deg, #ff5a5a, #6fe08f); }
+.sp .its { grid-column: 2 / 5; font-size: 0.8em; letter-spacing: 1px; }
+.sp.out { opacity: 0.45; }
+.sp.me { box-shadow: 0 0 0 1px var(--acc) inset; }
+.duel-res { padding: 4px 0; }
+.loss { color: #ff8a8a; font-weight: 700; }
+.arena-bar { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); margin-top: 84px; display: flex; gap: 6px; }
+@media (max-width: 760px) { .augs { grid-template-columns: 1fr; } .items { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
