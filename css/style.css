@@ -39,7 +39,7 @@ select, input { background: #0f1622; border: 1px solid var(--line); border-radiu
 .go.on { background: linear-gradient(180deg, #2e7d4a, #1d5232); }
 .ro { margin: 0; padding: 8px 10px; background: #0f1622; border-radius: 8px; border: 1px solid var(--line); }
 .hint { color: var(--mut); font-size: 0.85em; }
-.hero-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.hero-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; max-height: 46vh; overflow-y: auto; padding: 2px; }
 .hero { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border: 2px solid var(--line); }
 .hero i { width: 40px; height: 40px; border-radius: 50%; background: var(--c); display: grid; place-items: center; font-style: normal; font-weight: 900; color: #0b1018; font-size: 1.2em; box-shadow: inset -4px -6px 0 rgba(0,0,0,0.25); }
 .hero b { font-size: 0.95em; }
@@ -108,7 +108,7 @@ body.touch .mob-only { display: inline-block; }
 
 @media (max-width: 760px) {
   .cols { grid-template-columns: 1fr; }
-  .hero-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .hero-grid { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 5px; max-height: 38vh; }
   .hero { padding: 7px 2px; }
   .hero i { width: 32px; height: 32px; }
   .hero small { display: none; }

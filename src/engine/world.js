@@ -4,6 +4,7 @@
 import { TAU, clamp, angDiff, deg, makeRng } from './math.js';
 import { ARENAS, edgeDist, clampInside } from './arena.js';
 import { HEROES } from './heroes.js';
+import { BAL } from './balance.js';
 
 export const DT = 1 / 60;
 export const KB_FRICTION = 2.4;   // tốc độ tắt dần lực văng (1/s)
@@ -25,7 +26,7 @@ export class World {
     this.s = {
       v: 1, tick: 0, t: 0, clock: 0, arena: o.arena, stocks: o.stocks, timeLimit: o.timeLimit,
       phase: 'countdown', cdT: 3, winner: null, endReason: null, nextId: 1,
-      fighters: [], projs: [], zones: [], evId: 0,
+      fighters: [], projs: [], zones: [], ents: [], evId: 0,
     };
     this.events = []; // sự kiện hình/âm (không ảnh hưởng gameplay)
     for (let i = 0; i < 2; i++) this.s.fighters.push(this.makeFighter(i, o.heroes[i], o.names[i]));
@@ -61,7 +62,14 @@ export class World {
 
   // ---------- chỉ số ----------
   H(f) { return HEROES[f.hero]; }
-  weight(f) { return this.H(f).weight * (f.st.heavy ? 1 + f.st.heavy.p : 1); }
+  // bộ chiêu đang dùng (Luca có thể đang dùng A/B/C sao chép)
+  skillHero(f, k) { const c = f.ws.copy; return c && f.ws.copyOn && (k === 'A' || k === 'B' || k === 'C') && HEROES[c] ? c : f.hero; }
+  skill(f, k) { return HEROES[this.skillHero(f, k)].skills[k]; }
+  weight(f) {
+    let w = this.H(f).weight * (f.st.heavy ? 1 + f.st.heavy.p : 1) * ((BAL[f.hero] && BAL[f.hero].w) || 1);
+    if (f.st.poison) w *= 1 - 0.05 * f.st.poison.n;
+    return w;
+  }
   speed(f) {
     let s = BASE_SPEED * this.H(f).speed;
     if (f.st.haste) s *= 1 + f.st.haste.p;
@@ -70,17 +78,20 @@ export class World {
   }
   alive(f) { return !f.dead && f.falling <= 0 && f.respawn <= 0; }
   superArmor(f) { return !!(f.st.armor || f.st.block || f.st.immortal || (f.act && f.act.armor)); }
+  cc(f) { const s = f.st; return !!(s.stun || s.sleep || s.petrify || s.grabbed || s.charm); }
   canAct(f) {
-    return this.alive(f) && f.hitstun <= 0 && !f.st.stun && !f.st.grabbed && f.z <= 0 && !f.dash && !(f.act && f.act.lock !== false);
+    return this.alive(f) && f.hitstun <= 0 && !this.cc(f) && f.z <= 0 && !f.dash && !(f.act && f.act.lock !== false);
   }
-  canMove(f) { return this.alive(f) && f.hitstun <= 0 && !f.st.stun && !f.st.root && !f.st.grabbed; }
+  canMove(f) { return this.alive(f) && f.hitstun <= 0 && !this.cc(f) && !f.st.root; }
   ultReady(f) { const H = this.H(f); return H.ultReady ? H.ultReady(f, this) : f.rage >= 100; }
 
   canUse(f, k) {
-    const sk = this.H(f).skills[k];
+    const sk = this.skill(f, k);
     if (!sk) return false;
-    if (sk.recast && sk.recast(f, this)) return this.alive(f) && f.hitstun <= 0 && !f.st.stun && !f.st.grabbed && !(f.act && f.act.lock !== false && !sk.recastBusy);
+    if (sk.recast && sk.recast(f, this)) return this.alive(f) && f.hitstun <= 0 && !this.cc(f) && !(f.act && f.act.lock !== false && !sk.recastBusy);
+    if (sk.breakCC && this.alive(f) && f.cd[k] <= 0 && !f.st.grabbed && !(sk.can && !sk.can(f, this))) return true;
     if (!this.canAct(f)) return false;
+    if (sk.mob && f.st.nodash) return false;
     if (f.cd[k] > 0) return false;
     if (f.st.silence && k !== 'A') return false;
     if (k === 'U' && !this.ultReady(f)) return false;
@@ -93,14 +104,14 @@ export class World {
   act(f, key, o) {
     const evs = (o.ev || []).slice().sort((a, b) => a.at - b.at);
     f.act = { key, t: 0, dur: o.dur, move: o.move ?? 0, lock: o.lock ?? true, anim: o.anim || 'swing', ang: o.ang ?? f.facing,
-      armor: o.armor ? 1 : 0, ev: evs, ei: 0, ax: o.ax ?? f.x, ay: o.ay ?? f.y, p: o.p ?? 0, tg: o.tg || 0, hit: [] };
+      armor: o.armor ? 1 : 0, ev: evs, ei: 0, ax: o.ax ?? f.x, ay: o.ay ?? f.y, p: o.p ?? 0, tg: o.tg || 0, hit: [], h: o.h || this.skillHero(f, key) };
     f.facing = f.act.ang;
     this.runEvents(f, 0);
   }
   dash(f, o) {
     const a = o.ang;
     f.dash = { vx: Math.cos(a) * o.dist / o.dur, vy: Math.sin(a) * o.dist / o.dur, t: 0, dur: o.dur, hit: o.hit || null, hitIds: [],
-      stopAtEdge: o.stopAtEdge ?? true, through: !!o.through, stopOnHit: !!o.stopOnHit, onEnd: o.onEnd || null };
+      stopAtEdge: o.stopAtEdge ?? true, through: !!o.through, stopOnHit: !!o.stopOnHit, onEnd: o.onEnd || null, onHit: o.onHit || null, h: (f.act && f.act.h) || f.hero };
     if (o.invuln) f.invuln = Math.max(f.invuln, o.dur + 0.04);
   }
   runEvents(f, t) {
@@ -114,17 +125,17 @@ export class World {
     const ang = e.ang != null ? e.ang : a ? a.ang + (e.rot || 0) : f.facing;
     switch (e.do) {
       case 'arc':
-        this.ev('fx', { kind: 'arc', x: f.x, y: f.y, a: ang, r: e.range, arc: e.arc, color: this.H(f).color, life: 0.18, fid: f.id });
+        this.ev('fx', { kind: 'arc', x: e.px ?? f.x, y: e.py ?? f.y, a: ang, r: e.range, arc: e.arc, color: this.H(f).color, life: 0.18, fid: f.id });
         return this.hitArc(f, ang, e);
       case 'line':
-        this.ev('fx', { kind: 'thrust', x: f.x, y: f.y, a: ang, r: e.len, w: e.w, color: this.H(f).color, life: 0.18, fid: f.id });
+        this.ev('fx', { kind: 'thrust', x: e.px ?? f.x, y: e.py ?? f.y, a: ang, r: e.len, w: e.w, color: this.H(f).color, life: 0.18, fid: f.id });
         return this.hitLine(f, ang, e);
       case 'circle': return this.hitCircle(f, e.ox != null ? f.x + Math.cos(ang) * e.ox : (e.x ?? f.x), e.ox != null ? f.y + Math.sin(ang) * e.ox : (e.y ?? f.y), e);
       case 'proj': return this.proj(f, ang, e);
       case 'dash': return this.dash(f, Object.assign({}, e, { ang }));
       case 'status': return this.addStatus(f, e.st, e.dur, e.p);
       case 'fx': return this.ev('fx', { kind: e.kind, x: f.x, y: f.y, a: ang, r: e.r || 40, color: e.color || this.H(f).color, life: e.life || 0.3 });
-      case 'custom': { const fn = this.H(f).ev && this.H(f).ev[e.fn]; if (fn) fn(this, f, a, e); return; }
+      case 'custom': { const HH = HEROES[(a && a.h) || f.hero], fn = HH.ev && HH.ev[e.fn]; if (fn) fn(this, f, a, e); return; }
       default: return;
     }
   }
@@ -136,50 +147,62 @@ export class World {
     if (bad && (f.st.immortal || f.invuln > 0)) return;
     if (CC.has(type) && f.st.armor && f.st.armor.unstop) return;
     const s = f.st[type];
-    if (type === 'burn') {
-      if (s) { s.t = Math.max(s.t, dur); s.n = Math.min(3, s.n + 1); } else f.st.burn = { t: dur, p, n: 1, max: dur };
+    if (type === 'burn' || type === 'bleed' || type === 'poison') {
+      const cap = type === 'burn' ? 3 : type === 'bleed' ? 5 : 6;
+      if (s) { s.t = Math.max(s.t, dur); s.n = Math.min(cap, s.n + 1); s.max = Math.max(s.max, dur); } else f.st[type] = { t: dur, p, n: 1, max: dur };
       return;
     }
+    if (type === 'shield') {
+      if (s) { s.p = Math.min(40, s.p + p); s.t = Math.max(s.t, dur); s.max = Math.max(s.max, dur); } else f.st.shield = { t: dur, p, max: dur };
+      return;
+    }
+    if (type === 'petrify') { f.vx = 0; f.vy = 0; }
     if (s) { s.t = Math.max(s.t, dur); s.p = Math.max(s.p, p); s.max = Math.max(s.max, dur); }
     else f.st[type] = { t: dur, p, max: dur };
-    if (type === 'stun' || type === 'grabbed') { this.cancelAct(f); }
+    if (type === 'stun' || type === 'grabbed' || type === 'sleep' || type === 'petrify' || type === 'charm') { this.cancelAct(f); }
   }
   cancelAct(f) {
     const a = f.act;
+    const ch = f.charge;
     f.act = null; f.charge = null;
     if (f.dash) f.dash = null;
-    if (a) { const H = this.H(f); if (H.onCancel) H.onCancel(this, f, a); }
+    const H = this.H(f);
+    if ((a || ch) && H.onCancel) H.onCancel(this, f, a, ch);
   }
 
   // ---------- đánh trúng ----------
   targets(f) { return this.s.fighters.filter((t) => t.team !== f.team && this.alive(t)); }
+  // mục tiêu đánh được: tướng địch + vật triệu hồi/ảo ảnh địch có thể bị đánh
+  hitTargets(f) { return this.targets(f).concat(this.s.ents.filter((e) => e.hittable && e.team !== f.team && !e.dead)); }
+  hitAny(f, t, h) { return t.kind ? this.hitEnt(f, t, h) : this.applyHit(f, t, h); }
   hitArc(f, ang, e) {
     let n = 0;
-    for (const t of this.targets(f)) {
-      const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy);
+    const x0 = e.px ?? f.x, y0 = e.py ?? f.y, src = { x: x0, y: y0 };
+    for (const t of this.hitTargets(f)) {
+      const dx = t.x - x0, dy = t.y - y0, d = Math.hypot(dx, dy);
       if (d > e.range + t.r) continue;
       if (d > f.r + t.r && Math.abs(angDiff(ang, Math.atan2(dy, dx))) > deg(e.arc) / 2) continue;
-      if (this.applyHit(f, t, Object.assign({ src: f, dist: d, range: e.range }, e))) n++;
+      if (this.hitAny(f, t, Object.assign({ src, dist: d, range: e.range }, e))) n++;
     }
     return n;
   }
   hitLine(f, ang, e) {
     let n = 0;
-    const c = Math.cos(ang), s = Math.sin(ang), ox = e.ox || 0;
-    for (const t of this.targets(f)) {
-      const dx = t.x - f.x, dy = t.y - f.y;
+    const c = Math.cos(ang), s = Math.sin(ang), ox = e.ox || 0, x0 = e.px ?? f.x, y0 = e.py ?? f.y;
+    for (const t of this.hitTargets(f)) {
+      const dx = t.x - x0, dy = t.y - y0;
       const u = dx * c + dy * s, v = -dx * s + dy * c;
       if (u < ox - t.r || u > e.len + t.r || Math.abs(v) > e.w / 2 + t.r) continue;
-      if (this.applyHit(f, t, Object.assign({ src: f, dist: u, range: e.len, angle: e.push === 'out' ? undefined : ang }, e))) n++;
+      if (this.hitAny(f, t, Object.assign({ src: { x: x0, y: y0 }, dist: u, range: e.len, angle: e.push === 'out' ? undefined : ang }, e))) n++;
     }
     return n;
   }
   hitCircle(f, x, y, e) {
     let n = 0;
-    for (const t of this.targets(f)) {
+    for (const t of this.hitTargets(f)) {
       const d = Math.hypot(t.x - x, t.y - y);
       if (d > e.r + t.r) continue;
-      if (this.applyHit(f, t, Object.assign({ src: { x, y }, dist: d, range: e.r }, e))) n++;
+      if (this.hitAny(f, t, Object.assign({ src: { x, y }, dist: d, range: e.r }, e))) n++;
     }
     if (e.fx !== false) this.ev('fx', { kind: e.fxKind || 'ring', x, y, r: e.r, color: e.color || this.H(f).color, life: 0.35 });
     return n;
@@ -189,7 +212,8 @@ export class World {
   applyHit(att, t, h) {
     if (!this.alive(t) || t.invuln > 0) return false;
     const AH = this.H(att), TH = this.H(t);
-    const info = { dmgK: 1, kbK: 1, extra: null };
+    const bal = BAL[att.hero] || {};
+    const info = { dmgK: bal.d || 1, kbK: bal.k || 1, extra: null };
     if (AH.onDeal) AH.onDeal(this, att, t, h, info);
     if (TH.onTake) TH.onTake(this, t, att, h, info);
     if (info.cancel) return false;
@@ -200,6 +224,10 @@ export class World {
     if (block) dmg *= 0.2;
     if (armor) dmg *= armor.p || 1;
     if (immortal) dmg = 0;
+    const sh = !h.unblock && t.st.shield;
+    let shieldFull = false;
+    if (sh && dmg > 0) { const ab = Math.min(dmg, sh.p); sh.p -= ab; dmg -= ab; if (sh.p <= 0.01) delete t.st.shield; shieldFull = dmg <= 0.01; }
+    if (t.st.sleep) { delete t.st.sleep; info.kbK *= 2; this.text(t.x, t.y - 56, 'TỈNH GIẤC!', '#c0b0ff', 15); }
     t.percent = Math.min(999, t.percent + dmg);
     att.stats.dealt += dmg; t.stats.taken += dmg; att.stats.hits++;
     t.lastHitBy = att.id;
@@ -213,6 +241,8 @@ export class World {
       if (h.fixedKb) mag = h.fixedKb * info.kbK;
       if (block) mag *= 0.08;
       if (armor) mag *= armor.p || 1;
+      if (shieldFull) mag *= 0.4;
+      if (t.st.petrify) mag = 0;
       if (mag > 1) {
         t.vx = Math.cos(ang) * mag; t.vy = Math.sin(ang) * mag;
         let hs = h.hitstun ?? (0.08 + mag * 0.00042);
@@ -228,6 +258,12 @@ export class World {
     if (h.silence && hard) this.addStatus(t, 'silence', h.silence);
     if (h.slow) this.addStatus(t, 'slow', h.slow[1], h.slow[0]);
     if (h.burn) this.addStatus(t, 'burn', h.burn, 0.9);
+    if (h.bleed) this.addStatus(t, 'bleed', 3, 0.5);
+    if (h.poison) this.addStatus(t, 'poison', 5, 0.6);
+    if (h.nodash) this.addStatus(t, 'nodash', h.nodash);
+    if (h.charm && hard) this.addStatus(t, 'charm', h.charm, att.id);
+    if (h.sleep && hard) this.addStatus(t, 'sleep', h.sleep);
+    if (h.blind) this.addStatus(t, 'blind', h.blind);
     t.flash = 0.12;
     if (info.extra) info.extra();
     if (AH.afterDeal) AH.afterDeal(this, att, t, h, mag);
@@ -242,7 +278,8 @@ export class World {
     const p = { id: this.id(), owner: f.id, team: f.team, x: f.x + Math.cos(ang) * ox, y: f.y + Math.sin(ang) * ox,
       vx: Math.cos(ang) * e.speed, vy: Math.sin(ang) * e.speed, r: e.r || 6, range: e.range || 500, trav: 0,
       kind: e.kind || 'bolt', color: e.color || this.H(f).color, hit: e.hit || {}, pierce: !!e.pierce, hitIds: [],
-      explode: e.explode || null, endBoom: !!e.endBoom, breaks: !!e.breaks, home: e.home || 0, tg: e.tg || 0, tag: e.tag || '' };
+      explode: e.explode || null, endBoom: !!e.endBoom, breaks: !!e.breaks, home: e.home || 0, tg: e.tg || 0, tag: e.tag || '', h: (f.act && f.act.h) || f.hero, wall: !!e.wall };
+    if (e.px != null) { p.x = e.px; p.y = e.py; }
     this.s.projs.push(p);
     return p;
   }
@@ -262,16 +299,25 @@ export class World {
       p.x += sx; p.y += sy; p.trav += Math.hypot(sx, sy);
       let dead = false;
       // cột chắn đạn
-      for (const c of A.pillars) if (Math.hypot(p.x - c.x, p.y - c.y) < c.r + p.r) { dead = true; break; }
+      if (!p.wall) for (const c of A.pillars) if (Math.hypot(p.x - c.x, p.y - c.y) < c.r + p.r) { dead = true; break; }
+      // khiên chặn đạn (status reflect = phản đạn, bwall = chặn)
       if (!dead) for (const t of this.s.fighters) {
-        if (t.team === p.team || !this.alive(t) || p.hitIds.includes(t.id)) continue;
+        if (t.team === p.team || !(t.st.bwall || t.st.reflect) || Math.hypot(t.x - p.x, t.y - p.y) > t.r + p.r + 22) continue;
+        if (t.st.reflect) { p.team = t.team; p.owner = t.id; p.vx = -p.vx; p.vy = -p.vy; p.hitIds = []; p.trav = 0; p.h = t.hero; this.ev('fx', { kind: 'spark', x: p.x, y: p.y, r: 24, color: '#ffffff', life: 0.2 }); }
+        else { dead = true; this.ev('fx', { kind: 'spark', x: p.x, y: p.y, r: 20, color: '#9ec9ff', life: 0.2 }); }
+        break;
+      }
+      if (!dead) for (const t of this.s.fighters.concat(this.s.ents)) {
+        if (t.team === p.team || p.hitIds.includes(t.id)) continue;
+        if (t.kind ? !t.hittable || t.dead : !this.alive(t)) continue;
+        if (t.kind && t.eatsProj) { p.hitIds.push(t.id); dead = true; this.ev('fx', { kind: 'spark', x: p.x, y: p.y, r: 18, color: '#c0a0ff', life: 0.2 }); break; }
         if (Math.hypot(t.x - p.x, t.y - p.y) > t.r + p.r) continue;
         p.hitIds.push(t.id);
         if (owner) {
           if (p.explode) { this.boom(owner, p); dead = true; break; }
           const h = Object.assign({ src: { x: p.x - p.vx, y: p.y - p.vy }, angle: Math.atan2(p.vy, p.vx), proj: p.kind, tag: p.tag }, p.hit);
-          this.applyHit(owner, t, h);
-          const H = this.H(owner); if (H.onProjHit) H.onProjHit(this, owner, p, t);
+          const ok = this.hitAny(owner, t, h);
+          const H = HEROES[p.h || owner.hero]; if (ok && !t.kind && H.onProjHit) H.onProjHit(this, owner, p, t);
         }
         if (!p.pierce) { dead = true; break; }
       }
@@ -279,7 +325,7 @@ export class World {
       if (!dead && p.breaks) for (const q of this.s.projs) {
         if (q.team !== p.team && !q.gone && Math.hypot(q.x - p.x, q.y - p.y) < q.r + p.r + 8) { q.gone = true; this.ev('fx', { kind: 'spark', x: q.x, y: q.y, r: 22, color: '#ffffff', life: 0.25 }); }
       }
-      if (!dead && p.trav >= p.range) { dead = true; if (p.endBoom && owner) this.boom(owner, p); }
+      if (!dead && p.trav >= p.range) { dead = true; if (p.endBoom && owner) this.boom(owner, p); if (owner && !p.hitIds.length) { const H = HEROES[p.h || owner.hero]; if (H.onProjEnd) H.onProjEnd(this, owner, p); } }
       if (!dead && edgeDist(A, p.x, p.y) < -400) dead = true;
       if (p.gone) dead = true;
       if (!dead) keep.push(p);
@@ -291,6 +337,7 @@ export class World {
     const e = Object.assign({ fxKind: 'boom', color: p.color }, p.explode);
     this.hitCircle(owner, p.x, p.y, e);
     this.ev('sfx', { name: 'boom', x: p.x, y: p.y, v: Math.min(1, e.r / 120) });
+    const H = HEROES[p.h || owner.hero]; if (H.onBoom) H.onBoom(this, owner, p);
   }
 
   // ---------- vùng (lửa, thiên thạch, lồng đấu...) ----------
@@ -336,6 +383,45 @@ export class World {
     this.s.zones = keep;
   }
 
+  // ---------- vật triệu hồi / ảo ảnh / ụ súng ----------
+  // e: { kind, x, y, r, dur, hittable, hp, eatsProj, ... } — hành vi ở HEROES[h].ents[kind]
+  ent(f, o) {
+    const e = Object.assign({ id: this.id(), h: (f.act && f.act.h) || f.hero, owner: f.id, team: f.team, t: 0, dur: 5, r: 16, hp: 1, hittable: false, x: f.x, y: f.y, fa: f.facing }, o);
+    this.s.ents.push(e);
+    return e;
+  }
+  entDef(e) { const H = HEROES[e.h]; return (H && H.ents && H.ents[e.kind]) || {}; }
+  owned(f, kind) { return this.s.ents.filter((e) => e.owner === f.id && e.kind === kind && !e.dead); }
+  hitEnt(att, e, h) {
+    if (e.dead) return false;
+    const D = this.entDef(e);
+    if (D.onHit) { D.onHit(this, e, att, h); return true; }
+    e.hp -= Math.max(1, (h.dmg || 0) / 6);
+    this.ev('hit', { x: e.x, y: e.y, dmg: 0, mag: 120, pct: 0, color: this.H(att).color, blocked: false, tid: 0 });
+    if (e.hp <= 0) this.killEnt(e, att);
+    return true;
+  }
+  killEnt(e, by) {
+    if (e.dead) return;
+    e.dead = true;
+    const D = this.entDef(e);
+    this.ev('fx', { kind: 'puff', x: e.x, y: e.y, r: e.r * 2, color: '#ffffff', life: 0.35 });
+    if (D.onDeath) D.onDeath(this, e, by);
+  }
+  stepEnts(dt) {
+    for (const e of this.s.ents) {
+      if (e.dead) continue;
+      e.t += dt;
+      const D = this.entDef(e);
+      if (!this.fighter(e.owner)) { e.dead = true; continue; }
+      if (D.update) D.update(this, e, dt);
+      if (!e.dead && e.dur && e.t >= e.dur) { e.dead = true; if (D.onEnd) D.onEnd(this, e); }
+    }
+    this.s.ents = this.s.ents.filter((e) => !e.dead);
+  }
+  // đòn đánh của vật triệu hồi (dùng owner để tính nội tại/thống kê)
+  entHit(e, t, h) { const o = this.fighter(e.owner); return o ? this.hitAny(o, t, Object.assign({ src: e }, h)) : false; }
+
   // ---------- vòng lặp ----------
   step(inputs) {
     const s = this.s, dt = DT;
@@ -357,6 +443,7 @@ export class World {
     for (const f of s.fighters) this.stepFighter(f, dt, inputs[f.slot] || EMPTY_INPUT);
     this.stepProjs(dt);
     this.stepZones(dt);
+    this.stepEnts(dt);
     this.collideFighters();
     if (s.timeLimit && s.clock >= s.timeLimit) this.end(null, 'time');
   }
@@ -371,7 +458,7 @@ export class World {
     for (const k of KEYS) if (f.cd[k] > 0) f.cd[k] = Math.max(0, f.cd[k] - dt);
     for (const k in f.st) {
       const s = f.st[k];
-      if (k === 'burn') f.percent += s.p * s.n * dt;
+      if (k === 'burn' || k === 'bleed' || k === 'poison') f.percent += s.p * s.n * dt;
       s.t -= dt;
       if (s.t <= 0) { delete f.st[k]; if (H.onStatusEnd) H.onStatusEnd(this, f, k, s); }
     }
@@ -433,7 +520,7 @@ export class World {
     const H = this.H(f);
     // tụ lực: giữ nút → tăng; thả → tung
     if (f.charge) {
-      const c = f.charge, sk = H.skills[c.key];
+      const c = f.charge, sk = this.skill(f, c.key);
       c.t += dt;
       if (sk.onCharge) sk.onCharge(this, f, c, dt);
       if (!inp.held[c.key] || c.t >= sk.hold + (sk.autoRelease ?? 0.35)) {
@@ -451,18 +538,18 @@ export class World {
     for (const k of KEYS) if (inp.pressed[k]) f.buf = { k, t: BUFFER_T };
     let k = f.buf && f.buf.k;
     // giữ A = đánh liên tục
-    if (!k && inp.held.A && H.skills.A && !H.skills.A.hold) k = 'A';
+    if (!k && inp.held.A && this.skill(f, 'A') && !this.skill(f, 'A').hold && !this.skill(f, 'A').noRepeat) k = 'A';
     if (!k) return;
     if (!this.canUse(f, k)) return;
     f.buf = null;
-    const sk = H.skills[k];
+    const sk = this.skill(f, k);
     if (sk.recast && sk.recast(f, this)) {
       const ctx = this.aimCtx(f, inp, sk);
       sk.recastUse(this, f, ctx);
       this.ev('cast', { fid: f.id, key: k });
       return;
     }
-    if (sk.hold) {
+    if (sk.hold && !(sk.holdIf && !sk.holdIf(f, this))) {
       f.charge = { key: k, t: 0 };
       if (sk.onChargeStart) sk.onChargeStart(this, f);
       return;
@@ -483,11 +570,18 @@ export class World {
       if (L > 0.05) {
         let k = 1;
         if (f.act) k = f.act.move;
-        if (f.charge) k = H.skills[f.charge.key].chargeMove ?? 0.4;
+        if (f.charge) k = this.skill(f, f.charge.key).chargeMove ?? 0.4;
+        if (f.st.channel) k = Math.min(k, f.st.channel.p);
         const sp = this.speed(f) * k * Math.min(1, L);
         mx = (inp.mx / L) * sp; my = (inp.my / L) * sp;
       }
     }
+    // mê hoặc: tự bước về phía kẻ mê hoặc
+    if (f.st.charm && this.alive(f)) {
+      const c = this.fighter(f.st.charm.p);
+      if (c) { const a = Math.atan2(c.y - f.y, c.x - f.x), sp = this.speed(f) * 0.55; mx = Math.cos(a) * sp; my = Math.sin(a) * sp; f.facing = a; }
+    }
+    if (f.st.petrify) { mx = my = 0; f.vx = f.vy = 0; }
     f.mvx = mx; f.mvy = my;
     if (f.dash) {
       const d = f.dash;
@@ -500,6 +594,7 @@ export class World {
           if (d.hitIds.includes(t.id) || Math.hypot(t.x - f.x, t.y - f.y) > f.r + t.r + 6) continue;
           d.hitIds.push(t.id);
           this.applyHit(f, t, Object.assign({ src: f, angle: Math.atan2(d.vy, d.vx) }, d.hit));
+          if (d.onHit) { const HH = HEROES[d.h || f.hero], fn = HH.ev && HH.ev[d.onHit]; if (fn) fn(this, f, f.act, d, t); }
           if (d.stopOnHit) { this.endDash(f); break; }
         }
       }
@@ -523,7 +618,7 @@ export class World {
     if (f.z <= 0 && ed < -LEDGE && this.alive(f)) { this.startFall(f); return; }
     if (ed < 0 && kbSp < 150 && f.hitstun <= 0) clampInside(A, f, 0);
   }
-  endDash(f) { const d = f.dash; f.dash = null; if (d && d.onEnd) { const fn = this.H(f).ev && this.H(f).ev[d.onEnd]; if (fn) fn(this, f, f.act, d); } }
+  endDash(f) { const d = f.dash; f.dash = null; if (d && d.onEnd) { const HH = HEROES[d.h || f.hero], fn = HH.ev && HH.ev[d.onEnd]; if (fn) fn(this, f, f.act, d); } }
 
   collidePillars(f) {
     if (f.z > 40) return;
@@ -573,6 +668,7 @@ export class World {
     f.falling = 0;
     f.stocks--;
     for (const z of this.s.zones) if (z.owner === f.id && z.kind === 'cage') z.dur = 0;
+    const H = this.H(f); if (H.onKO) H.onKO(this, f);
     if (f.stocks <= 0) {
       f.dead = true;
       const other = this.foe(f);
@@ -611,5 +707,6 @@ export class World {
   takeEvents() { const e = this.events; this.events = []; return e; }
 }
 
-const BAD = new Set(['stun', 'slow', 'silence', 'root', 'burn', 'grabbed', 'marked']);
-const CC = new Set(['stun', 'slow', 'silence', 'root']);
+const BAD = new Set(['stun', 'slow', 'silence', 'root', 'burn', 'grabbed', 'marked', 'bleed', 'poison', 'charm', 'sleep', 'petrify', 'nodash', 'blind', 'dark']);
+const CC = new Set(['stun', 'slow', 'silence', 'root', 'charm', 'sleep', 'blind']);
+export const CC_ALL = CC;

@@ -3,7 +3,7 @@
 const r1 = (v) => Math.round(v * 10) / 10;
 const r0 = Math.round;
 const r2 = (v) => Math.round(v * 100) / 100;
-const WS_KEYS = ['ammo', 'reload', 'exp', 'ki', 'stk', 'emp', 'grab', 'mark', 'lastAtk'];
+const WS_KEYS = ['ammo', 'reload', 'exp', 'ki', 'stk', 'emp', 'grab', 'mark', 'lastAtk', 'hype', 'con', 'wind', 'faith', 'ice', 'vp', 'sw', 'gear', 'part', 'am', 'sh', 'form', 'ac', 'an', 'mode', 'card', 'sty', 'stance', 'die', 'rr', 'copy', 'copyOn', 'ar', 'sn', 'drag', 'notes', 'stk', 'bonus'];
 
 export function packView(s) {
   return {
@@ -12,6 +12,7 @@ export function packView(s) {
     f: s.fighters.map(packFighter),
     p: s.projs.map((p) => [p.id, p.kind, r0(p.x), r0(p.y), r2(Math.atan2(p.vy, p.vx)), r1(p.r), p.color, p.team]),
     z: s.zones.map((z) => [z.id, z.kind, r0(z.x), r0(z.y), r0(z.r), r2(z.t), z.delay || 0, z.dur, z.team, z.color]),
+    e: s.ents.map((e) => [e.id, e.kind, r0(e.x), r0(e.y), e.r, e.team, e.h, r2(e.fa || 0), r2(e.t), e.dur || 0]),
   };
 }
 
@@ -40,6 +41,8 @@ export function lerpView(a, b, k) {
     const da = Math.atan2(Math.sin(fb.fa - fa.fa), Math.cos(fb.fa - fa.fa));
     return Object.assign({}, fb, { x: fa.x + (fb.x - fa.x) * k, y: fa.y + (fb.y - fa.y) * k, z: fa.z + (fb.z - fa.z) * k, fa: fa.fa + da * k });
   });
+  const ea = new Map((a.e || []).map((e) => [e[0], e]));
+  out.e = (b.e || []).map((eb) => { const q = ea.get(eb[0]); if (!q || Math.hypot(q[2] - eb[2], q[3] - eb[3]) > 150) return eb; const c = eb.slice(); c[2] = q[2] + (eb[2] - q[2]) * k; c[3] = q[3] + (eb[3] - q[3]) * k; return c; });
   const pa = new Map(a.p.map((p) => [p[0], p]));
   out.p = b.p.map((pb) => {
     const q = pa.get(pb[0]);

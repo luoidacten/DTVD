@@ -436,6 +436,10 @@ const borg = {
   },
 };
 
-export const HEROES = { valerius, gideon, ryoma, vesper, ignatius, elara, zero, borg };
+import { BATCH1A } from './heroes2.js';
+import { BATCH1B } from './heroes2b.js';
+import { BATCH2, HEROES_REF } from './heroes3.js';
+export const HEROES = { valerius, gideon, ryoma, vesper, ignatius, elara, zero, borg, ...BATCH1A, ...BATCH1B, ...BATCH2 };
+HEROES_REF.h = HEROES;
 export const HERO_IDS = Object.keys(HEROES);
 for (const id of HERO_IDS) HEROES[id].id = id;

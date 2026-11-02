@@ -2,7 +2,7 @@
 
 Game đối kháng **1v1 điều khiển trực tiếp**, lấy gameplay từ bản Legacy: **điểm văng %**, lực đẩy, cột chắn, **rơi đài** và **mạng (stock)**. Chơi **offline với máy** hoặc **online 2 người** qua WebRTC P2P (PeerJS). Chạy được trên **PC** (bàn phím + chuột) và **điện thoại** (cần ảo + nút chiêu).
 
-Bản viết lại từ đầu của Legacy (bản cũ nằm ở repo `auto-bat`, thư mục `legacy/`). Không cần build, không cần máy chủ riêng: GitHub Pages phục vụ thẳng `index.html`.
+Bản viết lại từ đầu của Legacy (bản cũ nằm ở repo `auto-bat`, thư mục `legacy/`). 40 tướng. Không cần build, không cần máy chủ riêng: GitHub Pages phục vụ thẳng `index.html`.
 
 - Chạy máy mình: `npm run serve` (hoặc `python3 -m http.server 8765`) rồi mở `http://localhost:8765/`
 
@@ -26,20 +26,26 @@ Bản viết lại từ đầu của Legacy (bản cũ nằm ở repo `auto-bat`
 
 Giữ A để đánh liên tục. Chiêu tụ lực (Đại Hỏa Cầu, Kéo Căng Dây, Đấm Móc, Thế Thủ Tụ Lực): giữ nút rồi thả.
 
-## 8 tướng
+## 40 tướng
 
-| Tướng | Vai trò | Điểm nhấn |
-| --- | --- | --- |
-| Valerius | Đỡ đòn | Giơ khiên chặn rồi húc khiên câm lặng; Nộ bất tử 5s |
-| Gideon | Tiên phong | Điểm Ngọt ở mũi kiếm (x1.6 lực văng); gồng thân thép; chấn động diện rộng |
-| Ryoma | Kiếm sĩ | Nối 2 chiêu khác nhau tạo Combo → Kiếm Khí phá đạn; Vô Ảnh Trảm đẩy ra mép |
-| Vesper | Sát thủ | Đâm sau lưng x2; tàng hình; phi dao rồi dịch chuyển ra sau lưng |
-| Ignatius | Pháp sư | Thiêu đốt cộng dồn; Đại Hỏa Cầu tụ lực; dịch chuyển; Thiên Thạch chọn điểm |
-| Elara | Xạ thủ | Tập Trung sau 4s; kéo cung tụ lực xuyên thấu; nhảy lùi làm chậm; tên khổng lồ đuổi mục tiêu |
-| Zero | Xạ thủ | Băng đạn 9 viên; khóa mục tiêu; Thiết Thân nhảy lùi; đạn nổ |
-| Borg | Đấu sĩ | Đấm Móc lao tới hất tung; gồng tích lực trả đòn; túm ném theo hướng chọn; Lồng Đấu |
+Toàn bộ roster Legacy, viết lại trên engine mới (không chép code bản cũ):
 
-Thêm tướng: viết một object trong `src/engine/heroes.js` (chiêu là dữ liệu sự kiện `arc/line/circle/proj/dash/custom`), thêm cách vẽ vũ khí trong `render.js` nếu cần, rồi chạy `npm test` và `npm run balance`.
+- **Đế Quốc Autheria:** Valerius, Theron, Florian, Ignatius
+- **Hiệp Hội Lữ Khách:** Gideon, Aria & Oktava, Koda, Death, Elara, Percy
+- **Cống Ngầm Down:** Borg, Roxie & T-Zero, Alice
+- **Vương Quốc Phía Đông:** Ryoma, Wukong, Kazuki
+- **Thành Phố Up:** Zero, Chrono & Neo, Victoria
+- **Thị Trấn Phía Nam:** Clint, Jack "Sáu Lỗ", Joker
+- **Hội Sát Thủ UKI:** Vesper, Raven, Diệp Thanh Phong, Galo
+- **14 tướng làm lại theo bộ chiêu gốc** (bản cũ chuyển lỗi: nội tại trống, chiêu chung chung): Boran, Ariston, Dr. Vector, Lyra, Ratok, Kip, Olivia, Justus, Mirage, Dahlia, Luca, Dr. Caelus, Bạch Diệp, Tsukiyo
+
+Mỗi tướng có A/B/C/D/Nộ, nội tại và tài nguyên riêng (hiện dưới chân tướng): vật triệu hồi (Oktava, lính của Victoria, ụ pháo & T-Zero, quạ Oca, bóng của Death), ảo ảnh bị đánh vỡ (Alice, Mirage, Dahlia, Chrono & Neo), chiêu bấm lại lần hai, tụ lực, phá khống chế, sao chép chiêu (Luca), tua ngược thời gian (Caelus).
+
+Trạng thái: choáng, làm chậm, trói, câm lặng, mê hoặc, ngủ, hóa đá, chảy máu, độc, thiêu đốt, cấm lướt, mù/màn đêm, khiên, thiết thân, phản đạn.
+
+Thêm tướng: viết object trong `src/engine/heroes*.js` (chiêu là sự kiện dữ liệu `arc/line/circle/proj/dash/custom`; vật triệu hồi qua `w.ent` + `ents`), thêm cách vẽ vũ khí trong `render.js` nếu cần, rồi chạy `npm test`, `npm run balance` và `node tools/all-heroes.cjs`.
+
+Cân bằng: `src/engine/balance.js` là hệ số sát thương/lực văng/trọng lượng theo tướng, sinh bởi `node tools/autobal.mjs [vòng] [trận mỗi cặp]` (bot đấu bot mọi cặp, kéo tỉ lệ thắng về 50%). Có thể chỉnh tay.
 
 ## Online
 
@@ -79,10 +85,11 @@ tools/        mô phỏng hàng loạt, đo cân bằng, kiểm tra trình duy�
 ## Kiểm tra
 
 ```sh
-npm test                 # 128 trận bot vs bot mọi cặp tướng/sàn: không lỗi, không NaN, trận kết thúc
+npm test                 # 3200 trận bot vs bot mọi cặp tướng/sàn: không lỗi, không NaN, trận kết thúc
+node tools/all-heroes.cjs http://127.0.0.1:8765/index.html   # chơi thử cả 40 tướng trong trình duyệt
 npm run balance          # tỉ lệ thắng, %/phút, KO ở bao nhiêu %
 npm run smoke            # PC + điện thoại (Playwright, cần npm run serve đang chạy)
 node tools/online-smoke.cjs http://127.0.0.1:8765/index.html 9000   # 2 trình duyệt online, cần PeerServer cục bộ cổng 9000
 ```
 
-Cân bằng hiện được ước lượng bằng bot (mức Thường: tỉ lệ thắng 24–74%). Cần người thật chơi thử để chỉnh tiếp.
+Cân bằng hiện được ước lượng bằng bot (mức Thường: đa số tướng 38–64%, Lyra còn cao ~71%). Cần người thật chơi thử để chỉnh tiếp.
