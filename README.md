@@ -2,10 +2,9 @@
 
 Game đối kháng **1v1 điều khiển trực tiếp**, lấy gameplay từ bản Legacy: **điểm văng %**, lực đẩy, cột chắn, **rơi đài** và **mạng (stock)**. Chơi **offline với máy** hoặc **online 2 người** qua WebRTC P2P (PeerJS). Chạy được trên **PC** (bàn phím + chuột) và **điện thoại** (cần ảo + nút chiêu).
 
-Đây là bản viết lại từ đầu, gọn hơn bản `legacy/` (bản cũ để nguyên để đối chiếu). Không cần build, không cần máy chủ riêng: mở thẳng `arena/index.html` trên GitHub Pages.
+Bản viết lại từ đầu của Legacy (bản cũ nằm ở repo `auto-bat`, thư mục `legacy/`). Không cần build, không cần máy chủ riêng: GitHub Pages phục vụ thẳng `index.html`.
 
-- GitHub Pages: `https://<tài-khoản>.github.io/auto-bat/arena/`
-- Chạy máy mình: `cd auto-bat && python3 -m http.server 8765` rồi mở `http://localhost:8765/arena/`
+- Chạy máy mình: `npm run serve` (hoặc `python3 -m http.server 8765`) rồi mở `http://localhost:8765/`
 
 ## Luật
 
@@ -82,8 +81,8 @@ tools/        mô phỏng hàng loạt, đo cân bằng, kiểm tra trình duy�
 ```sh
 npm test                 # 128 trận bot vs bot mọi cặp tướng/sàn: không lỗi, không NaN, trận kết thúc
 npm run balance          # tỉ lệ thắng, %/phút, KO ở bao nhiêu %
-node tools/smoke.cjs http://127.0.0.1:8765/arena/index.html   # PC + điện thoại (Playwright)
-node tools/online-smoke.cjs http://127.0.0.1:8765/arena/index.html 9000   # 2 trình duyệt online, cần PeerServer cục bộ cổng 9000
+npm run smoke            # PC + điện thoại (Playwright, cần npm run serve đang chạy)
+node tools/online-smoke.cjs http://127.0.0.1:8765/index.html 9000   # 2 trình duyệt online, cần PeerServer cục bộ cổng 9000
 ```
 
 Cân bằng hiện được ước lượng bằng bot (mức Thường: tỉ lệ thắng 24–74%). Cần người thật chơi thử để chỉnh tiếp.

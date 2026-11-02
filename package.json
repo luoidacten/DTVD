@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node tools/sim.mjs 2",
     "balance": "node tools/metrics.mjs 3 normal",
-    "serve": "cd .. && python3 -m http.server 8765"
+    "serve": "python3 -m http.server 8765",
+    "smoke": "node tools/smoke.cjs http://127.0.0.1:8765/index.html"
   }
 }

@@ -1,6 +1,6 @@
 // Kiểm tra trình duyệt: menu → đấu máy (PC) và điện thoại cảm ứng. node tools/smoke.cjs [baseURL] [outDir]
 const { chromium } = require('playwright');
-const base = process.argv[2] || 'http://127.0.0.1:8765/arena/index.html';
+const base = process.argv[2] || 'http://127.0.0.1:8765/index.html';
 const out = process.argv[3] || '.';
 (async () => {
   const browser = await chromium.launch();

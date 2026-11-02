@@ -1,7 +1,7 @@
 // Kiểm tra online thật: 2 trang trình duyệt, PeerServer cục bộ, WebRTC DataChannel.
 // node tools/online-smoke.cjs [baseURL] [peerPort] [outDir]
 const { chromium } = require('playwright');
-const base = process.argv[2] || 'http://127.0.0.1:8765/arena/index.html';
+const base = process.argv[2] || 'http://127.0.0.1:8765/index.html';
 const port = +(process.argv[3] || 9000), out = process.argv[4] || '.';
 const cfg = `window.ARENA_ONLINE_CONFIG = { peerjs: { host: '127.0.0.1', port: ${port}, path: '/', secure: false }, iceServers: (window.__ICE || []) };`;
 (async () => {
