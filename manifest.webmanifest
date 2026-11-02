@@ -1,0 +1,11 @@
+{
+  "name": "Legacy Đấu Trường",
+  "short_name": "Đấu Trường",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1018",
+  "theme_color": "#0b1018",
+  "icons": [{ "src": "favicon.ico", "sizes": "48x48", "type": "image/x-icon" }]
+}

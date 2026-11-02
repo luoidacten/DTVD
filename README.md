@@ -24,6 +24,7 @@ Bản viết lại từ đầu của Legacy (bản cũ nằm ở repo `auto-bat`
 | A / B / C / D / Nộ | Chuột trái hoặc Q / Chuột phải hoặc E / Shift hoặc R / F / Space | 5 nút bên phải |
 | Hủy chiêu | — | Kéo vào ô ✕ Hủy rồi thả |
 | Tạm dừng | Esc | Nút ⏸ |
+| Toàn màn hình | F11 / nút ⛶ | Nút ⛶ (tự bật khi vào trận, xoay ngang). iPhone: Chia sẻ → Thêm vào MH chính |
 
 Giữ A để đánh liên tục. Chiêu tụ lực (Đại Hỏa Cầu, Kéo Căng Dây, Đấm Móc, Thế Thủ Tụ Lực): giữ nút rồi thả.
 

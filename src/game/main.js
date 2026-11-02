@@ -52,14 +52,14 @@ function beginGame(g) {
   R.reset();
   input.enabled = true;
   input.last = {};
-  hud.innerHTML = `<div class="hud-btns"><button class="hb" id="hb-pause" title="Tạm dừng / Menu">⏸</button><button class="hb" id="hb-mute" title="Âm thanh">${isMuted() ? '🔇' : '🔊'}</button><button class="hb mob-only" id="hb-full" title="Toàn màn hình">⛶</button></div>`;
+  hud.innerHTML = `<div class="hud-btns"><button class="hb" id="hb-pause" title="Tạm dừng / Menu">⏸</button><button class="hb" id="hb-mute" title="Âm thanh">${isMuted() ? '🔇' : '🔊'}</button><button class="hb fs-btn" id="hb-full" title="Toàn màn hình (F11)">${fsIcon()}</button></div>`;
   if (G.me >= 0) input.mount(hud, G.cfg.heroes[G.me]);
   $('#hb-pause').onclick = () => openPause();
   $('#hb-mute').onclick = (e) => { e.currentTarget.textContent = toggleMute() ? '🔇' : '🔊'; };
-  $('#hb-full').onclick = () => goFullscreen();
+  $('#hb-full').onclick = () => toggleFullscreen();
   hud.classList.remove('hidden');
   showScreen(null);
-  if (input.touch) goFullscreen();
+  if (prefs.autoFs !== false) goFullscreen();
 }
 
 function endGame() {
@@ -67,12 +67,29 @@ function endGame() {
   hud.classList.add('hidden'); hud.innerHTML = '';
 }
 
+// ---------- toàn màn hình ----------
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+const fsOK = () => !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
 function goFullscreen() {
   const el = document.documentElement;
-  if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().then(() => {
-    try { screen.orientation.lock('landscape').catch(() => {}); } catch {}
-  }).catch(() => {});
+  if (fsEl()) return;
+  const req = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : null;
+  Promise.resolve(req).then(() => { try { if (input.touch) screen.orientation.lock('landscape').catch(() => {}); } catch {} }).catch(() => {});
 }
+function toggleFullscreen() {
+  if (!fsOK()) { toast('Trình duyệt này không hỗ trợ toàn màn hình. Trên iPhone: bấm Chia sẻ → "Thêm vào MH chính" rồi mở từ biểu tượng.', 6000); return; }
+  if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document).catch?.(() => {});
+  else goFullscreen();
+}
+function fsIcon() { return fsEl() ? '🗗' : '⛶'; }
+const syncFsBtns = () => { for (const b of document.querySelectorAll('.fs-btn')) b.textContent = fsIcon(); setTimeout(() => R.resize(), 60); };
+document.addEventListener('fullscreenchange', syncFsBtns);
+document.addEventListener('webkitfullscreenchange', syncFsBtns);
+// nút toàn màn hình cố định ở góc cho mọi màn hình menu
+const fsCorner = document.createElement('button');
+fsCorner.className = 'fs-btn fs-corner'; fsCorner.title = 'Toàn màn hình'; fsCorner.textContent = '⛶';
+fsCorner.onclick = toggleFullscreen; document.body.appendChild(fsCorner);
+addEventListener('keydown', (e) => { if (e.code === 'F11' && fsOK()) { e.preventDefault(); toggleFullscreen(); } });
 
 // ====================================================================
 // Vòng lặp
@@ -224,6 +241,7 @@ function home() {
       <button class="big" id="b-host">🌐 Tạo phòng online</button>
       <div class="join-row"><input id="code" maxlength="6" placeholder="MÃ PHÒNG" autocomplete="off"><button id="b-join">Vào phòng</button></div>
       <button id="b-help">📖 Cách chơi</button>
+      <label class="chk"><input type="checkbox" id="autofs" ${prefs.autoFs !== false ? 'checked' : ''}> Tự bật toàn màn hình khi vào trận</label>
     </div>
     <p class="foot">Hai người cùng mở trang này: một người tạo phòng và gửi mã, người kia nhập mã để vào. Máy tạo phòng làm chủ trận đấu.</p>
   </div>`);
@@ -236,6 +254,7 @@ function home() {
   $('#code').onkeydown = (e) => { if (e.key === 'Enter') $('#b-join').click(); };
   $('#code').oninput = (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); };
   $('#b-help').onclick = help;
+  $('#autofs').onchange = (e) => { prefs.autoFs = e.target.checked; persist(); };
 }
 
 function heroGrid(sel, id = 'grid', extra = '') {

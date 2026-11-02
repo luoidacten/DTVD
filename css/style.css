@@ -162,3 +162,9 @@ h5 { margin: 10px 0 4px; color: var(--mut); }
 .loss { color: #ff8a8a; font-weight: 700; }
 .arena-bar { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); margin-top: 84px; display: flex; gap: 6px; }
 @media (max-width: 760px) { .augs { grid-template-columns: 1fr; } .items { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
+
+/* ---- toàn màn hình ---- */
+.fs-corner { position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); z-index: 30; padding: 6px 10px; font-size: 16px; background: rgba(8,12,20,0.7); }
+body:has(#hud:not(.hidden)) .fs-corner { display: none; }
+.chk { display: flex; align-items: center; gap: 8px; color: var(--mut); font-size: 0.9em; justify-content: center; }
+.chk input { width: auto; }
